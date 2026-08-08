@@ -1,0 +1,37 @@
+package z:agent-paywall@0.1.0;
+
+world agent-paywall {
+    import host:tenant/tenant-context@1.0.0;
+    import host:interfaces/logging@2.1.0;
+    import host:interfaces/kv-store@2.1.0;
+    import host:interfaces/http-with-placeholders@2.1.0;
+    import host:interfaces/http@2.1.0;
+
+    export contracts;
+}
+
+interface contracts {
+    record generic-input {
+        input:        option<list<u8>>,
+        user-profile: option<list<u8>>,
+        context:      option<list<u8>>,
+    }
+
+    /// Check whether a priced agent call is under the session budget.
+    /// Reads spend counters from KV; no side effects.
+    /// Input  (JSON): { caller, label, amount_cents }
+    /// Output (JSON): { allowed, session_spent_cents, session_budget_cents, session_remaining_cents, reason }
+    check-gate: func(req: generic-input) -> result<list<u8>, string>;
+
+    /// Atomic gate-check + spend: validates the call is within budget,
+    /// increments the session counter (KV), and meters the payment.
+    /// Input  (JSON): { caller, label, amount_cents }
+    /// Output (JSON): { granted, spent_cents, session_spent_cents, session_remaining_cents, receipt, payment_ref }
+    enter-gateway: func(req: generic-input) -> result<list<u8>, string>;
+
+    /// Advance one call press the "pay-for-service" gate and emit a
+    /// Stripe PaymentIntent-style event via http-with-placeholders.
+    /// Input  (JSON): { caller, amount_cents, currency }
+    /// Output (JSON): { ok, payment_intent, amount_cents, currency, session_remaining_cents }
+    pay-for-service: func(req: generic-input) -> result<list<u8>, string>;
+}

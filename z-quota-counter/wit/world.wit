@@ -1,0 +1,33 @@
+package z:quota-counter@0.1.0;
+
+world quota-counter {
+    import host:tenant/tenant-context@1.0.0;
+    import host:interfaces/logging@2.1.0;
+    import host:interfaces/kv-store@2.1.0;
+
+    export contracts;
+}
+
+interface contracts {
+    record generic-input {
+        input:        option<list<u8>>,
+        user-profile: option<list<u8>>,
+        context:      option<list<u8>>,
+    }
+
+    /// Check the current quota usage for a caller key.
+    /// Input  (JSON): { key } — e.g. "did:key:z6Mkabc"
+    /// Output (JSON): { key, quota_map, used, limit, remaining, resets_at }
+    check: func(req: generic-input) -> result<list<u8>, string>;
+
+    /// Increment the usage counter for a caller key by `amount`
+    /// (default 1). Hard-stops at `limit`:
+    /// Input  (JSON): { key, limit, amount? }
+    /// Output (JSON): { key, used, limit, remaining, exceeded, at_limit }
+    consume: func(req: generic-input) -> result<list<u8>, string>;
+
+    /// Reset a caller's usage counter back to zero.
+    /// Input  (JSON): { key }
+    /// Output (JSON): { key, used, limit }
+    reset: func(req: generic-input) -> result<list<u8>, string>;
+}

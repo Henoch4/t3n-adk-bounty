@@ -1,0 +1,23 @@
+# Node
+node_modules/
+dist/
+
+# Env / secrets
+.env
+.env.local
+*.env
+
+# Rust / WASM build artifacts
+target/
+shared-target/
+*.wasm
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*

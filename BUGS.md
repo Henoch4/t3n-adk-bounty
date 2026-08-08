@@ -1,0 +1,147 @@
+# T3N ADK Bounty — Submitter Findings (BUGS.md)
+
+Verified against **testnet** cluster, `@terminal3/t3n-sdk@4.30.0`,
+Node v24.18.0, Rust 1.97.1, `wasm32-wasip2`, Aug 2026.
+
+## Reprintable evidence
+
+Every finding below was reproduced by me; the failing call + error are quoted
+inline. Contract IDs reference this tenant:
+`did:t3n:5db3681df85b9a698777a5aa603329da86cdb5dc`.
+
+---
+
+### 1. `token.balance` / `token.get-usage` are broken on this cluster (blocked credit proof)
+
+`quickstart.ts` reproduces two SDK failures when querying the token ledger after
+`T3nClient.authenticate()`:
+
+- `getBalance()` →
+  `DOMException [InvalidCharacterError]: Invalid character` (thrown in `atob`).
+- `getUsage()` → `RPC Error: invalid token.get-usage params: invalid type:
+  expected struct GetUsageParams ...`
+
+Both are *self-only* sealed-session RPCs (the SDK seals `get-usage` / balance with
+the session key rather than plaintext over TLS). Every documented way to show a
+credit balance fails on a freshly-claimed wallet:
+
+```
+[errors]:
+DOMException [InvalidCharacterError]: Invalid character
+    at new DOMException (...)
+RPC Error: invalid token.get-usage params: invalid type: expected struct GetUsageParams
+```
+
+**Repro**: `npx tsx my-t3n-app/quickstart.ts` (auth succeeds; both balance
+calls throw).
+
+**Impact**: a tenant cannot programmatically prove their credit balance via the
+SDK/CLI — a required "claim free tokens" step in the walkthrough.
+
+**Workaround**: none in SDK. `T3nClient.execute` runs `action.execute` with a
+sealed blob the node rejects for `get-usage`. The CLI (`t3n token balance`)
+hits the same code path.
+
+**Severity**: medium-high (docs promise balance UX; both helper paths are dead on
+this cluster).
+
+---
+
+### 2. Contract re-registration requires a strictly-increasing semver and re-mints KV map ACL
+
+`tenant.contracts.register({ tail, version, wasm })` **rejects a re-upload of the
+same version**:
+
+```
+RPC Error: contract version invalid: version 0.1.1 is not higher than current version 0.1.1
+```
+
+A fix cycle for a contract therefore *must* bump `version` (0.1.0 → 0.1.1 → 0.2.0).
+Additionally, **each registration hands the map ACL a NEW `contract_id`**:
+
+```
+first deploy: contract_id 553  → maps.gate.quotas readers/writers = [553]
+re-run @0.2.0: contract_id 555 → kv denied: TenantContract(.../555) cannot read map z:...:quotas
+```
+
+So after any re-registration the tenant must re-run `maps.update(tail, {
+readers, writers })` with the new id — the SDK does not do this, and the
+walkthrough's "register once" flow silently breaks the map ACL on any upgrade.
+
+**Impact**: no in-place upgrade path; every hotfix is a manual `version` bump +
+map re-grant + fresh contract id, and the previous set of map grants is orphaned.
+
+**Severity**: medium (affects any iteration / CI push over a register+map pair).
+
+---
+
+### 3. Single-tenant `maps` namespace: `writers: { only: [contract_id] }` is lost on upgrade
+
+`maps.update(tail, { writers: { only: [newId] }, readers: { only: [newId] } })`
+— the only documented way to scope a map to a contract. Because of #2, the
+"only" set becomes wrong the moment a contract is re-registered. There is no
+`only: [contract owner]` affordance to keep the tenant itself writable while
+giving a single contract read access.
+
+**Severity**: low (design gap, not a crash).
+
+---
+
+### 4. `fuel_per_minute` is burned by ~10 KV-heavy calls (rate-limit trap)
+
+A single demo script performing 8 contract invocations + a re-registration burns
+the cluster's `fuel_per_minute_max: 500_000_000` and begins throwing
+`RPC error: quota exceeded (fuel_per_minute)` on the 9th..12th call.
+
+**Impact**: a developer iterating over contracts (build → register → verify →
+log) hits hard rate-limiting after a handful of calls, with a per-minute letal
+cool-down. There is no per-call fee display in the SDK's error surface, so the
+54(), next() are all the developer gets.
+
+**Severity**: medium. See `demo-quota.log` tail for the exact sequence that trips
+it.
+
+---
+
+### 5. `tenant.tenant.me()` returns quotas+status whose docs don't match runtime
+
+The SDK docs (README, `TenantMeResponse`) describe the shape as `{tenant, label,
+status, quotas}` — but never document the `max_inline_bytes` / `max_cas_bytes` /
+`cas_retention_days: null` / `log_max_entries` fields that determine real
+contract budget. The walkthrough's "check your quotas" snippet talks about a
+smaller shape. (No functional break, purely a docs-vs-runtime diff.)
+
+**Severity**: low — good for the Candidate notes, not a block.
+
+---
+
+### 6. WASM size limit vs default `opt-level = "s"` docs
+
+`max_wasm_bytes: 1048576` (1 MiB) per contract is easily exceeded with `lto =
+true` linking `wit-bindgen` into the component for the `http` + `kv` interfaces
+together. Our `z_agent_paywall.wasm` and `z_quota_counter.wasm` come in under
+the cap (~154–155 KB) because the flight reference uses `opt-level="s"` —
+worth calling out that a single 1 MiB cap is shared across all interfaces and
+any extra host interface pulls need a bump.
+
+**Severity**: low (docs gap worth confirming the cap is per-contract, not
+cluster-wide).
+
+---
+
+### 7. (Environment note) `wasm-tools` cannot be be built on a 100%-full disk **issue**
+
+Fixed locally (disk freed by removing `cargo-install*` temp dirs); not an SDK
+issue — included for transparency because `wasm-tools component wit` is the
+walkthrough's verification step.
+
+---
+
+## SDK features confirmed GOOD (no action needed)
+
+- `T3nClient.authenticate` (Eth sign), `setEnvironment("testnet")`, node URL
+  resolution, `createDefaultHandlers` + `EthSign`.
+- `TenantClient` + `tenant.contracts.register`, `maps.create/update/entrySet`
+  paths — used for both our custom contracts.
+- `http-with-placeholders` + `http` host interfaces reachable from wasip2.
+- `logging.info` appears in `tenant.contracts.logs`.
