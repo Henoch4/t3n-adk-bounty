@@ -89,17 +89,19 @@ giving a single contract read access.
 
 ### 4. `fuel_per_minute` is burned by ~10 KV-heavy calls (rate-limit trap)
 
-A single demo script performing 8 contract invocations + a re-registration burns
-the cluster's `fuel_per_minute_max: 500_000_000` and begins throwing
-`RPC error: quota exceeded (fuel_per_minute)` on the 9th..12th call.
+A single demo script performing ~10 KV-heavy contract invocations + a
+re-registration burns the cluster's `fuel_per_minute_max: 500_000_000` and
+begins throwing `RPC Error: quota exceeded (fuel_per_minute)` on a later
+call in the same minute (observed on the `reset`/`check` tail of
+`demo-quota.ts`, captured in `verification/LIVE_OUTPUTS.md`).
 
 **Impact**: a developer iterating over contracts (build → register → verify →
-log) hits hard rate-limiting after a handful of calls, with a per-minute letal
-cool-down. There is no per-call fee display in the SDK's error surface, so the
-54(), next() are all the developer gets.
+log) hits hard rate-limiting after a handful of calls, with a per-minute
+cool-down. There is no per-call fee display in the SDK, so the only signal the
+developer gets is the `quota exceeded (fuel_per_minute)` RPC error.
 
-**Severity**: medium. See `demo-quota.log` tail for the exact sequence that trips
-it.
+**Severity**: medium. See `verification/LIVE_OUTPUTS.md` for the exact call
+sequence that trips it.
 
 ---
 
@@ -117,12 +119,13 @@ smaller shape. (No functional break, purely a docs-vs-runtime diff.)
 
 ### 6. WASM size limit vs default `opt-level = "s"` docs
 
-`max_wasm_bytes: 1048576` (1 MiB) per contract is easily exceeded with `lto =
-true` linking `wit-bindgen` into the component for the `http` + `kv` interfaces
-together. Our `z_agent_paywall.wasm` and `z_quota_counter.wasm` come in under
-the cap (~154–155 KB) because the flight reference uses `opt-level="s"` —
-worth calling out that a single 1 MiB cap is shared across all interfaces and
-any extra host interface pulls need a bump.
+`max_wasm_bytes: 1048576` (1 MiB) per contract is easily exceeded when `lto =
+true` links `wit-bindgen` into the component for the `http` + `kv` interfaces
+together. Our `z_agent_paywall.wasm` and `z_quota_counter.wasm` prune the
+unused `http` imports (so each lands at ~160 KB — vs the flight reference
+which keeps `http` + `http-with-placeholders` and is over 200 KB). Worth
+calling out that a single 1 MiB cap is shared across all interfaces and any
+extra host interface pull needs a bump.
 
 **Severity**: low (docs gap worth confirming the cap is per-contract, not
 cluster-wide).

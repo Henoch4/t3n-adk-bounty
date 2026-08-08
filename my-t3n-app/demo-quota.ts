@@ -42,24 +42,30 @@ const tenantDid = did.value;
 const tenant = new TenantClient({ t3n, baseUrl: nodeUrl, tenantDid });
 
 const TAIL = "quota-counter";
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
-// Re-register with the rebuilt WASM so the limit-adoption fix is live.
-const wasmBytes = readFileSync(
-  resolve(process.cwd(), "..", "shared-target", "wasm32-wasip2", "release", "z_quota_counter.wasm")
-);
-const reg = await tenant.contracts.register({ tail: TAIL, version: VERSION, wasm: wasmBytes });
-console.log("[quota-counter] re-registered:", JSON.stringify(reg));
-const newId = (reg as { contract_id: number }).contract_id;
-// Re-scope the quotas map ACL to the new contract id (registration mints a fresh id)
+// 0.3.0 is already live (deploy-contracts.ts id 560). Registration is a
+// no-op when the version is current, so re-register only if it is still
+// missing (BUGS.md #2: a bump mints a fresh id and re-scopes the map ACL).
 try {
-  await tenant.maps.update("quotas", {
-    writers: { only: [newId] },
-    readers: { only: [newId] },
-  });
-  console.log("[quota-counter] quotas map ACL ->", newId);
+  const wasmBytes = readFileSync(
+    resolve(process.cwd(), "..", "shared-target", "wasm32-wasip2", "release", "z_quota_counter.wasm")
+  );
+  const reg = await tenant.contracts.register({ tail: TAIL, version: VERSION, wasm: wasmBytes });
+  console.log("[quota-counter] re-registered:", JSON.stringify(reg));
+  const newId = (reg as { contract_id: number }).contract_id;
+  // Re-scope the quotas map ACL to the new contract id (registration mints a fresh id)
+  try {
+    await tenant.maps.update("quotas", {
+      writers: { only: [newId] },
+      readers: { only: [newId] },
+    });
+    console.log("[quota-counter] quotas map ACL ->", newId);
+  } catch (e) {
+    console.log("[quota-counter] map ACL update:", (e as Error).message);
+  }
 } catch (e) {
-  console.log("[quota-counter] map ACL update:", (e as Error).message);
+  console.log("[quota-counter] register (already at 0.3.0 most likely):", (e as Error).message);
 }
 
 async function run(functionName: string, input: unknown) {

@@ -1,13 +1,15 @@
-//! z-agent-paywall v0.1.0 — paywalled agent gateway.
+//! z-agent-paywall v0.2.0 — paywalled agent gateway.
 //!
-//! Enforces a per-session spend budget BEFORE an agent tool dispatch is
-//! granted, then emits a Stripe PaymentIntent-style payment via the host
-//! `http-with-placeholders` interface (card data only ever enters the host's
-//! placeholder resolution — never WASM memory).
+//! Enforces a per-session spend budget AND a per-call cap BEFORE an agent
+//! tool dispatch is granted. On approval it mints a Stripe PaymentIntent-style
+//! intent locally (deterministic, no network in the reference path); a real
+//! deployment swaps the KV spend for an http-with-placeholders POST to
+//! api.stripe.com (card data only ever enters the host's placeholder
+//! resolution — never WASM memory).
 //!
-//! Host capabilities required (manifest):
+//! Host capabilities required (manifest) — exactly the imports in `wit/`:
 //! ```json
-//! { "host_capabilities": ["kv_store", "logging", "tenant_context", "http", "http_with_placeholders"] }
+//! { "host_capabilities": ["kv_store", "logging", "tenant_context"] }
 //! ```
 //!
 //! State layout — KV map `z:<tid>:gate`:
@@ -18,7 +20,7 @@
 
 extern crate alloc;
 
-pub const CONTRACT_VERSION: &str = "0.1.0";
+pub const CONTRACT_VERSION: &str = "0.2.0";
 
 wit_bindgen::generate!({
     world: "agent-paywall",

@@ -1,6 +1,6 @@
 [package]
 name = "z-agent-paywall"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Paywalled agent gateway — per-session spend caps enforced in KV before paid tool dispatch"
 license = "MIT"

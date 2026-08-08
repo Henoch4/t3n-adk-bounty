@@ -52,10 +52,17 @@ const tenantDid = did.value;
 console.log("Connected as:", tenantDid);
 
 // Proof of claimed free test tokens.
-// NOTE: t3n.getUsage() throws "invalid token.get-usage params ... expected
-// struct GetUsageParams" on this SDK build (v4.30.0) — the sealed-session RPC
-// sends a raw string where a struct is expected. getBalance() is the same
-// sealed path and works; documented as a bug finding.
-const balance = await t3n.getBalance();
-console.log("Free credits available:", balance.available);
+// NOTE: both balance helpers are broken on this cluster (BUGS.md #1):
+//   t3n.getBalance() throws DOMException [InvalidCharacterError] (in atob),
+//   t3n.getUsage()   throws "invalid token.get-usage params ... expected
+//   struct GetUsageParams".
+// Keeping the working auth path here; the failed helpers are reproduced in
+// BUGS.md instead of crashing the quickstart.
+const balance = await t3n.getBalance().catch((e: unknown) => {
+  console.log("getBalance() throws (BUGS.md #1):", (e as Error).message);
+  return null;
+});
+if (balance) {
+  console.log("Free credits available:", balance.available);
+}
 console.log("DID (short):", did.value);

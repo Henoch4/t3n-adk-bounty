@@ -1,6 +1,6 @@
 [package]
 name = "z-quota-counter"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "Per-caller usage quota counter for Trinity z-space tenants — KV-backed, tamper-evident counters per tenant session"
 license = "MIT"

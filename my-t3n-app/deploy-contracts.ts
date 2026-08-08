@@ -68,7 +68,16 @@ async function ensureMap(tail: string, contractIds: number[]) {
     });
     console.log(`[map] ${tail} created`);
   } catch (e) {
-    console.log(`[map] ${tail} (may already exist): ${(e as Error).message}`);
+    // Re-registration mints a fresh contract id — re-scope the ACL (BUGS.md #2).
+    try {
+      await tenant.maps.update(tail, {
+        writers: { only: contractIds },
+        readers: { only: contractIds },
+      });
+      console.log(`[map] ${tail} ACL -> ${contractIds.join(",")}`);
+    } catch (e2) {
+      console.log(`[map] ${tail} (create+update failed): ${(e as Error).message}`);
+    }
   }
 }
 
@@ -85,10 +94,11 @@ async function run(tail: string, version: string, functionName: string, input: u
 
 // ---- Paywall (z-agent-paywall) ----
 const PAYWALL_TAIL = "agent-paywall";
+const PAYWALL_VERSION = "0.2.0";
 const paywallId = await registerContract(
   PAYWALL_TAIL,
   "shared-target/wasm32-wasip2/release/z_agent_paywall.wasm",
-  "0.1.0"
+  PAYWALL_VERSION
 );
 await ensureMap("gate", [paywallId]);
 // seed session budget: 500 cents, 50 cent per-call cap
@@ -104,32 +114,32 @@ try {
 }
 
 // per-call cap = 50 cents. A 25c call passes, a 70c call is denied.
-await run(PAYWALL_TAIL, "0.1.0", "check-gate", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "check-gate", {
   caller: "did:key:z6Mk_demoCaller",
   label: "resume-rewrite",
   amount_cents: 25,
 });
-await run(PAYWALL_TAIL, "0.1.0", "check-gate", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "check-gate", {
   caller: "did:key:z6Mk_demoCaller",
   label: "video-render",
   amount_cents: 70,
 });
-await run(PAYWALL_TAIL, "0.1.0", "enter-gateway", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "enter-gateway", {
   caller: "did:key:z6Mk_demoCaller",
   label: "resume-rewrite",
   amount_cents: 25,
 });
-await run(PAYWALL_TAIL, "0.1.0", "enter-gateway", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "enter-gateway", {
   caller: "did:key:z6Mk_demoCaller",
   label: "resume-rewrite-second",
   amount_cents: 25,
 });
-await run(PAYWALL_TAIL, "0.1.0", "check-gate", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "check-gate", {
   caller: "did:key:z6Mk_demoCaller",
   label: "third-call-over-budget",
   amount_cents: 400,
 });
-await run(PAYWALL_TAIL, "0.1.0", "pay-for-service", {
+await run(PAYWALL_TAIL, PAYWALL_VERSION, "pay-for-service", {
   caller: "did:key:z6Mk_demoCaller",
   amount_cents: 10,
   currency: "usd",
@@ -139,20 +149,21 @@ console.log("[agent-paywall] logs:", JSON.stringify(paywallLogs));
 
 // --- Quota counter (z-quota-counter) ---
 const QUOTA_TAIL = "quota-counter";
+const QUOTA_VERSION = "0.3.0";
 const quotaId = await registerContract(
   QUOTA_TAIL,
   "shared-target/wasm32-wasip2/release/z_quota_counter.wasm",
-  "0.1.0"
+  QUOTA_VERSION
 );
 await ensureMap("quotas", [quotaId]);
 
-await run(QUOTA_TAIL, "0.1.0", "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
-await run(QUOTA_TAIL, "0.1.0", "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
-await run(QUOTA_TAIL, "0.1.0", "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
-await run(QUOTA_TAIL, "0.1.0", "check", { key: "did:key:z6Mk_app1" });
-await run(QUOTA_TAIL, "0.1.0", "consume", { key: "did:key:z6Mk_app2", limit: 3, amount: 1 });
-await run(QUOTA_TAIL, "0.1.0", "reset", { key: "did:key:z6Mk_app1" });
-await run(QUOTA_TAIL, "0.1.0", "check", { key: "did:key:z6Mk_app1" });
+await run(QUOTA_TAIL, QUOTA_VERSION, "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
+await run(QUOTA_TAIL, QUOTA_VERSION, "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
+await run(QUOTA_TAIL, QUOTA_VERSION, "consume", { key: "did:key:z6Mk_app1", limit: 5, amount: 2 });
+await run(QUOTA_TAIL, QUOTA_VERSION, "check", { key: "did:key:z6Mk_app1" });
+await run(QUOTA_TAIL, QUOTA_VERSION, "consume", { key: "did:key:z6Mk_app2", limit: 3, amount: 1 });
+await run(QUOTA_TAIL, QUOTA_VERSION, "reset", { key: "did:key:z6Mk_app1" });
+await run(QUOTA_TAIL, QUOTA_VERSION, "check", { key: "did:key:z6Mk_app1" });
 const quotaLogs = await tenant.contracts.logs(QUOTA_TAIL, { limit: 20 });
 console.log("[quota-counter] logs:", JSON.stringify(quotaLogs));
 
