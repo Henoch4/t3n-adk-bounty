@@ -21,3 +21,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Local helper binaries (wasm-tools downloaded, not repo-owned)
+wasm-tools.exe
