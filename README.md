@@ -24,6 +24,7 @@ my-t3n-app/        TypeScript SDK harness (tsx scripts)
 z-agent-paywall/   custom Gateway contract (WIT world + Rust src)
 z-quota-counter/   custom Quota counter contract
 z-tenant-flight/   reference contract (registered as travel-contracts)
+verification/      wasm-tools `component wit` extracts (binary-level WIT proof)
 BUGS.md            SDK/deliverable findings found while building
 ```
 
