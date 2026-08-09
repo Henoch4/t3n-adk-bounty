@@ -121,3 +121,32 @@ The node demanded **10,000,000,000** units of credit for a single read-only
 `contracts.logs` call while the testnet grants only **20,000** test credits
 total — see BUGS.md #8 for the units-mismatch write-up. Screenshot:
 `screenshots/demo-quota credit error.png`.
+
+## Pass C — third run after a 40,000-token top-up (credits restored)
+
+Confirmed the `InsufficientCredit` was a unit-conversion/display gap, not a
+fee floor: after the tenant topped up 40,000 tokens (1 token = 1,000,000
+units), the identical `demo-quota.ts` ran end-to-end with **no credit
+errors**. The only remaining error was the per-minute `fuel_per_minute` cap
+on the final `check` (BUGS.md #4).
+
+```
+[quota-counter] register (already at 0.3.1 on-cluster): RPC Error: contract
+  version invalid: version 0.3.1 is not higher than current version 0.3.1
+[consume] => {...,"key":"u:5db...:did:key:z6Mk_app1","used":4,"limit":5,"remaining":1,"exceeded":true,"at_limit":false}   (x3 — app1 already at 4/5, hard-stop holds)
+[check]   => {...,"key":"u:5db...:did:key:z6Mk_app1","used":4,"limit":5,"remaining":1,"reset_epoch_secs":1786233600}
+[consume] => {...,"key":"u:5db...:did:key:z6Mk_app2","used":3,"limit":3,"remaining":0,"exceeded":true,"at_limit":true}   (x4 — app2 already at 3/3, hard-stop holds)
+[check]   => {...,"key":"u:5db...:did:key:z6Mk_app2","used":3,"limit":3,"remaining":0,"reset_epoch_secs":1786233600}
+[reset]   => {...,"key":"u:5db...:did:key:z6Mk_app2","used":0,"limit":3}
+[check]   ERROR: RPC Error: quota exceeded (fuel_per_minute)   (per-minute cap, not credits)
+[quota-counter] logs: ... 20 entries flushed from inside the enclave ...
+DONE
+```
+
+Key outcomes of Pass C:
+- `reset` confirmed live again: `used 3/3` → `used 0/3`.
+- The exceeded consumes never over-wrote the stored counter (app2 stayed at 3
+  through four more attempts).
+- The `InsufficientCredit` block from Pass B is gone after the 40K-token
+  top-up, corroborating BUGS.md #8's corrected read (1 token = 1e6 units;
+  the raw error text just never says the unit).

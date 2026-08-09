@@ -107,8 +107,9 @@ Logs flushed from inside the enclave via `logging.info` read back through
 
 - **Agent ID claimed** — DID `did:t3n:5db3681df85b9a698777a5aa60331...b5dc`
 - **Free token proof** — SDK paths broken on this cluster; see BUGS.md #1 for
-  the repro + CLI fallback. The 20K grant is also consumed by a single demo
-  loop and a 10B-unit fee floor then blocks further reads — BUGS.md #8.
+  the repro + CLI fallback. Credit math is unit-denominated (1 token =
+  1,000,000 units) and the `InsufficientCredit` error doesn't say the unit —
+  BUGS.md #8; cleared by a 40K-token top-up (Pass C in LIVE_OUTPUTS.md).
 - **Deployed TEE contract** — both contracts above, live on testnet
   (paywall `568` @0.2.1, quota-counter `569` @0.3.1).
 - **Bonus** — both paywall (agent-paywall) + quota counter.

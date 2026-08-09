@@ -143,12 +143,12 @@ walkthrough's verification step.
 
 ---
 
-### 8. `InsufficientCredit` units-mismatch — a tiny call demands 10,000,000,000 units against a 20,000-credit grant
+### 8. Credit math is unit-denominated (1 token = 1,000,000 units) and the SDK error is confusing
 
 After burning the testnet credit grant on the heavy `deploy-contracts.ts` +
 `demo-quota.ts` cycle, a follow-up `demo-quota.ts` run is rejected with an
-`InsufficientCredit` RPC error whose numbers don't line up with the cluster's
-advertised credit allowance:
+`InsufficientCredit` RPC error whose numbers looked like a units bug until the
+1 token = 1,000,000 units conversion was applied:
 
 ```
 InsufficientCreditError: InsufficientCredit
@@ -162,28 +162,26 @@ InsufficientCreditError: InsufficientCredit
   available: 0n
 ```
 
-The triggering call is `tenant.contracts.logs(tail, { limit: 20 })` — i.e. a
-read-only logs fetch. The node demands **10,000,000,000** units of credit for
-that one call, while the testnet grants a tenant **20,000** test credits total
-(see `tenant.tenant.me()` quotas). That ~500,000× gap looks like a units bug:
-the cost check appears to be denominated in a much smaller sub-unit than the
-account balance, so a freshly-claimed wallet is structurally unable to make
-even a single read-only RPC once the initial grant is spent. It is not a
-per-call fee display issue (#4) — the `required` literal is on the wire.
+The triggering call is `tenant.contracts.logs(tail, { limit: 20 })` — a
+read-only logs fetch — charged **10,000,000,000 units** (= 10,000 tokens) while
+the initial testnet grant is **20,000 tokens** (the `available: 0` surfaced
+after that grant was spent). The confusion: the error is denominated in
+sub-units (1e6/token) with no unit label, so a freshly-claimed wallet shows
+`required=10000000000` against a token-denominated balance and reads as a
+catastrophic mismatch. After a 40,000-token top-up the same script ran
+end-to-end with no credit errors — the gate is unit conversion + poor error
+presentation, not an un-shipable fee floor.
 
-**Repro**: exhaust the cluster credit grant by running `deploy-contracts.ts`
-end-to-end (≈11 KV-heavy calls), wait out the per-minute `fuel_per_minute`
-cool-down, then run `npx tsx my-t3n-app/demo-quota.ts`. The first `execute`
-or `contracts.logs` call throws with the error above.
+**Repro**: exhaust the credit grant (a full `deploy-contracts.ts` run + the
+per-minute `fuel_per_minute` cool-down waits), then `npx tsx demo-quota.ts`.
+First `execute`/`contracts.logs` throws the error above until a top-up lands.
 
-**Impact**: a candidate cannot complete a second end-to-end verification pass
-on the same wallet — the 20K grant is consumed by a single demo run, and the
-10B-unit floor prevents any further work. The free-token UX path (#1) is
-already broken, so there is no in-SDK way to top up.
+**Impact**: a candidate who burns the grant can't tell from the error how much
+credit a call needs or what unit it's in — the free-token UX path (#1) is
+already broken, so the only recourse is a manual wallet top-up.
 
-**Severity**: medium-high (blocks iteration on the same tenant; the bounty's
-"free tokens" hook is contradicted by an unreachable fee floor). Screenshot
-captured in `screenshots/demo-quota credit error.png`.
+**Severity**: low-medium (denomination/UX gap, not a functional block —
+verifiable by top-up). Screenshot in `screenshots/demo-quota credit error.png`.
 
 ---
 
