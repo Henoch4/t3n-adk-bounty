@@ -56,7 +56,7 @@ const WASM_PATH = resolve(process.cwd(), "..", "z-tenant-flight", "target", "was
 const wasmBytes = readFileSync(WASM_PATH);
 
 const CONTRACT_TAIL = "travel-contracts";
-const CONTRACT_VERSION = "0.1.0";
+const CONTRACT_VERSION = "0.1.1";
 const registerResult = await tenant.contracts.register({
   tail: CONTRACT_TAIL,
   version: CONTRACT_VERSION,

@@ -94,7 +94,7 @@ async function run(tail: string, version: string, functionName: string, input: u
 
 // ---- Paywall (z-agent-paywall) ----
 const PAYWALL_TAIL = "agent-paywall";
-const PAYWALL_VERSION = "0.2.0";
+const PAYWALL_VERSION = "0.2.1";
 const paywallId = await registerContract(
   PAYWALL_TAIL,
   "shared-target/wasm32-wasip2/release/z_agent_paywall.wasm",
@@ -149,7 +149,7 @@ console.log("[agent-paywall] logs:", JSON.stringify(paywallLogs));
 
 // --- Quota counter (z-quota-counter) ---
 const QUOTA_TAIL = "quota-counter";
-const QUOTA_VERSION = "0.3.0";
+const QUOTA_VERSION = "0.3.1";
 const quotaId = await registerContract(
   QUOTA_TAIL,
   "shared-target/wasm32-wasip2/release/z_quota_counter.wasm",

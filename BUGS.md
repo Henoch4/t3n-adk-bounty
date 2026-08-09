@@ -90,10 +90,13 @@ giving a single contract read access.
 ### 4. `fuel_per_minute` is burned by ~10 KV-heavy calls (rate-limit trap)
 
 A single demo script performing ~10 KV-heavy contract invocations + a
-re-registration burns the cluster's `fuel_per_minute_max: 500_000_000` and
-begins throwing `RPC Error: quota exceeded (fuel_per_minute)` on a later
-call in the same minute (observed on the `reset`/`check` tail of
-`demo-quota.ts`, captured in `verification/LIVE_OUTPUTS.md`).
+re-registration burns the cluster's `fuel_per_minute_max: 500_000_000` AND
+the tenant's 20K test-credit grant. The `fuel_per_minute` cap surfaces as an
+`RPC Error: quota exceeded (fuel_per_minute)` mid-script (captured on the
+`reset`/`check` tail of `demo-quota.ts`, see `verification/LIVE_OUTPUTS.md`),
+and once the credit grant is gone the account also hard-fails read-only
+`contracts.logs` calls with `InsufficientCredit (required=10000000000,
+available=0)` — see finding #8.
 
 **Impact**: a developer iterating over contracts (build → register → verify →
 log) hits hard rate-limiting after a handful of calls, with a per-minute
@@ -137,6 +140,50 @@ cluster-wide).
 Fixed locally (disk freed by removing `cargo-install*` temp dirs); not an SDK
 issue — included for transparency because `wasm-tools component wit` is the
 walkthrough's verification step.
+
+---
+
+### 8. `InsufficientCredit` units-mismatch — a tiny call demands 10,000,000,000 units against a 20,000-credit grant
+
+After burning the testnet credit grant on the heavy `deploy-contracts.ts` +
+`demo-quota.ts` cycle, a follow-up `demo-quota.ts` run is rejected with an
+`InsufficientCredit` RPC error whose numbers don't line up with the cluster's
+advertised credit allowance:
+
+```
+InsufficientCreditError: InsufficientCredit
+  (account=5db3681df85b9a698777a5aa603329da86cdb5dc,
+   required=10000000000, available=0)
+  code: 'RPC_ERROR',
+  rpcMethod: 'action.execute',
+  httpStatus: 403,
+  detail: 'InsufficientCredit (account=5db..., required=10000000000, available=0)',
+  required: 10000000000n,
+  available: 0n
+```
+
+The triggering call is `tenant.contracts.logs(tail, { limit: 20 })` — i.e. a
+read-only logs fetch. The node demands **10,000,000,000** units of credit for
+that one call, while the testnet grants a tenant **20,000** test credits total
+(see `tenant.tenant.me()` quotas). That ~500,000× gap looks like a units bug:
+the cost check appears to be denominated in a much smaller sub-unit than the
+account balance, so a freshly-claimed wallet is structurally unable to make
+even a single read-only RPC once the initial grant is spent. It is not a
+per-call fee display issue (#4) — the `required` literal is on the wire.
+
+**Repro**: exhaust the cluster credit grant by running `deploy-contracts.ts`
+end-to-end (≈11 KV-heavy calls), wait out the per-minute `fuel_per_minute`
+cool-down, then run `npx tsx my-t3n-app/demo-quota.ts`. The first `execute`
+or `contracts.logs` call throws with the error above.
+
+**Impact**: a candidate cannot complete a second end-to-end verification pass
+on the same wallet — the 20K grant is consumed by a single demo run, and the
+10B-unit floor prevents any further work. The free-token UX path (#1) is
+already broken, so there is no in-SDK way to top up.
+
+**Severity**: medium-high (blocks iteration on the same tenant; the bounty's
+"free tokens" hook is contradicted by an unreachable fee floor). Screenshot
+captured in `screenshots/demo-quota credit error.png`.
 
 ---
 

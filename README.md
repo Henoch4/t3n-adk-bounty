@@ -6,21 +6,25 @@ live on-cluster:
 
 | Contract | Tail | contract_id | What it proves |
 |---|---|---|---|
-| `z-agent-paywall` | `z:<tid>:agent-paywall` | 559 | Paywall gate — per-session budget + per-call cap enforced inside the enclave before an agent tool dispatch; identity-bound caller key |
-| `z-quota-counter` | `z:<tid>:quota-counter` | 560 | KV-backed per-caller quota counters with hard-stop at `limit`, 24h reset window, ceiling-clamped first-touch |
+| `z-agent-paywall` | `z:<tid>:agent-paywall` | 568 (v0.2.1) | Paywall gate — per-session budget + per-call cap enforced inside the enclave before an agent tool dispatch; identity-bound caller key |
+| `z-quota-counter` | `z:<tid>:quota-counter` | 569 (v0.3.1) | KV-backed per-caller quota counters with hard-stop at `limit`, 24h reset window, ceiling-clamped first-touch |
+
+Both were re-verified live by hand from a fresh `deploy-contracts.ts` run
+(screenshots in `screenshots/`). Each fresh `contracts.register` mints a new
+id — BUGS.md #2 — so earlier runs (559/560) are superseded by the IDs above.
 
 Both were built from scratch on this machine (Rust 1.97 → `wasm32-wasip2`,
 `wit-bindgen 0.49`), mirroring the reference `z-tenant-flight` crate, and
-registered via the official `@terminal3/t3n-sdk`. The contract ids above are
-freshly minted from the v0.2.0 / v0.3.0 re-registration (each register call
-mints a new id — BUGS.md #2).
+registered via the official `@terminal3/t3n-sdk`. The reference flight contract
+was re-registered during the same verification pass at contract_id **567**
+(v0.1.1, tail `travel-contracts`).
 
 ## Repo layout
 
 ```
 my-t3n-app/        TypeScript SDK harness (tsx scripts)
   quickstart.ts    auth + balance (balance path is broken — see BUGS.md)
-  walkthrough.ts   reference flight contract registration (contract_id 539)
+  walkthrough.ts   reference flight contract registration (contract_id 567)
   deploy-contracts.ts paywall + quota deploy, maps, budget seed, invocations
   demo-quota.ts    quota-counter re-register + per-caller demo
 z-agent-paywall/   custom Gateway contract (WIT world + Rust src)
@@ -28,6 +32,9 @@ z-quota-counter/   custom Quota counter contract
 z-tenant-flight/   reference contract (registered as travel-contracts)
 verification/      wasm-tools `component wit` extracts (binary-level WIT proof)
                     + LIVE_OUTPUTS.md (verbatim re-verification on testnet)
+screenshots/        hand-verified terminal captures of the live register+execute
+                    runs (walkthrough success, deploy-contracts success,
+                    demo-quota credit error — corroborate LIVE_OUTPUTS.md)
 BUGS.md            SDK/deliverable findings found while building
 ```
 
@@ -48,6 +55,12 @@ cd z-quota-counter && cargo build --target wasm32-wasip2 --release
 ```
 
 ## Live outputs (verbatim from testnet — `verification/LIVE_OUTPUTS.md`)
+
+> IDs in this section are from the most recent re-verification pass
+> (`deploy-contracts.ts` re-run: paywall `568` @0.2.1, quota-counter `569`
+> @0.3.1). Earlier runs minted different ids (see `LIVE_OUTPUTS.md`); every
+> fresh register mints a new id (BUGS.md #2). The contract behavior is
+> verifiable independently of which id is current — execute against the tail.
 
 ### Paywall — per-session budget + per-call cap, identity-bound caller
 ```
@@ -94,12 +107,18 @@ Logs flushed from inside the enclave via `logging.info` read back through
 
 - **Agent ID claimed** — DID `did:t3n:5db3681df85b9a698777a5aa60331...b5dc`
 - **Free token proof** — SDK paths broken on this cluster; see BUGS.md #1 for
-  the repro + CLI fallback.
-- **Deployed TEE contract** — both contracts above, live on testnet.
+  the repro + CLI fallback. The 20K grant is also consumed by a single demo
+  loop and a 10B-unit fee floor then blocks further reads — BUGS.md #8.
+- **Deployed TEE contract** — both contracts above, live on testnet
+  (paywall `568` @0.2.1, quota-counter `569` @0.3.1).
 - **Bonus** — both paywall (agent-paywall) + quota counter.
-- **Findings** — `BUGS.md`.
+- **Findings** — `BUGS.md` (#1–#8).
 - **Google Doc** — link in the bounty submission sheet.
-- **Screenshots** — `screenshots/`.
+- **Screenshots** — `screenshots/walkthrough success.png`,
+  `screenshots/deploy-contracts success.png`,
+  `screenshots/demo-quota credit error.png` (and the matching error frames
+  for the failing runs). Verbatim RPC transcripts in
+  `verification/LIVE_OUTPUTS.md`.
 
 ## License
 

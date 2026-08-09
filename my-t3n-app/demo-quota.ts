@@ -42,11 +42,12 @@ const tenantDid = did.value;
 const tenant = new TenantClient({ t3n, baseUrl: nodeUrl, tenantDid });
 
 const TAIL = "quota-counter";
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
-// 0.3.0 is already live (deploy-contracts.ts id 560). Registration is a
-// no-op when the version is current, so re-register only if it is still
-// missing (BUGS.md #2: a bump mints a fresh id and re-scopes the map ACL).
+// Each fresh register mints a new contract_id and re-scopes the map ACL
+// (BUGS.md #2). 0.3.0 already on-cluster (id 560) — bump to 0.3.1 (id 569)
+// lifts the strictly-higher gate. If 0.3.1 is already live too the register
+// throws (caught below) and the run targets the tail-version execute works.
 try {
   const wasmBytes = readFileSync(
     resolve(process.cwd(), "..", "shared-target", "wasm32-wasip2", "release", "z_quota_counter.wasm")
@@ -54,7 +55,6 @@ try {
   const reg = await tenant.contracts.register({ tail: TAIL, version: VERSION, wasm: wasmBytes });
   console.log("[quota-counter] re-registered:", JSON.stringify(reg));
   const newId = (reg as { contract_id: number }).contract_id;
-  // Re-scope the quotas map ACL to the new contract id (registration mints a fresh id)
   try {
     await tenant.maps.update("quotas", {
       writers: { only: [newId] },
@@ -65,7 +65,7 @@ try {
     console.log("[quota-counter] map ACL update:", (e as Error).message);
   }
 } catch (e) {
-  console.log("[quota-counter] register (already at 0.3.0 most likely):", (e as Error).message);
+  console.log("[quota-counter] register (already at " + VERSION + " on-cluster):", (e as Error).message);
 }
 
 async function run(functionName: string, input: unknown) {

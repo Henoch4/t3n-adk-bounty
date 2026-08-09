@@ -1,4 +1,10 @@
-# Live re-verification on testnet — 2026-08-08
+# Live re-verification on testnet
+
+Two passes — both recorded below. Every fresh `contracts.register` mints a
+new id (BUGS.md #2), so the IDs differ between passes; the contract *behavior*
+is reproduced by executing against the tail (version-bumped each run).
+
+## Pass A — first re-verification (this session, automated)
 
 Re-runs of `my-t3n-app/deploy-contracts.ts` and `my-t3n-app/demo-quota.ts`
 after the security/honesty fixes (identity binding, per-call cap in every
@@ -68,3 +74,50 @@ What this proves end-to-end on a live WASM enclave:
 - `reset_epoch_secs` is derived from the cluster clock and rolls every 24h
   (review F8 reset-window fix).
 - `reset` clears the counter back to zero while preserving the limit.
+
+## Pass B — second re-verification (hand-run, screenshots captured)
+
+A second end-to-end run of `walkthrough.ts` + `deploy-contracts.ts`
+(`tsx ...`) on the same tenant, with each script's `version` bumped because
+the on-cluster contract was already live (BUGS.md #2). Hand-verified on
+screen; screenshots saved under `screenshots/`. No `execute` outputs were
+pasted into this file for Pass B because the live `caller_key` /
+`exceeded` / `reset` rows reproduce the same shape as Pass A — only the
+contract IDs changed.
+
+| Script | Tail | version | new contract_id | Screenshot |
+|---|---|---|---|---|
+| `walkthrough.ts` | `travel-contracts` | 0.1.1 | 567 | `walkthrough success.png` |
+| `deploy-contracts.ts` | `agent-paywall` | 0.2.1 | 568 | `deploy-contracts success.png` |
+| `deploy-contracts.ts` | `quota-counter` | 0.3.1 | 569 | `deploy-contracts success.png` |
+| `demo-quota.ts` | `quota-counter` | 0.3.1 | (execute on tail 569) | `demo-quota credit error.png` |
+
+The paywall contract executed its full 6-call gate/pay sequence live (same
+shape as Pass A: identity-bound `caller_key=did:bound:...`, per-call cap
+denials at 70c and 400c, `pi_enc_...` intent on `pay-for-service`). The
+quota-counter's `consume`/`check` hard-stop path also ran live before the
+per-minute fuel cap tripped — same `fuel_per_minute` rate-limit trap as
+Pass A (BUGS.md #4).
+
+### Pass B — terminal onset: `demo-quota.ts` runs out of free credits
+
+The second `demo-quota.ts` invocation hit the credit grant floor before
+reaching `contracts.logs`:
+
+```
+InsufficientCreditError: InsufficientCredit
+  (account=5db3681df85b9a698777a5aa603329da86cdb5dc,
+   required=10000000000, available=0)
+  code: 'RPC_ERROR',
+  rpcMethod: 'action.execute',
+  httpStatus: 403,
+  detail: 'InsufficientCredit (account=5db..., required=10000000000,
+           available=0)',
+  required: 10000000000n,
+  available: 0n
+```
+
+The node demanded **10,000,000,000** units of credit for a single read-only
+`contracts.logs` call while the testnet grants only **20,000** test credits
+total — see BUGS.md #8 for the units-mismatch write-up. Screenshot:
+`screenshots/demo-quota credit error.png`.
